@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Profile | Identity Provider POC</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<main class="container wide">
+    <section class="card">
+        <div class="header-row">
+            <h1>Profile</h1>
+            <a class="text-link" th:href="@{/}">Home</a>
+        </div>
+
+        <dl class="profile-grid">
+            <dt>Name</dt>
+            <dd th:text="${name}">Name</dd>
+            <dt>Email</dt>
+            <dd th:text="${user.email ?: 'Not provided'}">Email</dd>
+            <dt>Subject</dt>
+            <dd th:text="${user.subject}">Subject</dd>
+            <dt>Issuer</dt>
+            <dd th:text="${user.issuer}">Issuer</dd>
+            <dt>Roles</dt>
+            <dd>
+                <span th:if="${#lists.isEmpty(roles)}" class="muted">No roles assigned</span>
+                <span th:each="role : ${roles}" class="badge" th:text="${role}">role</span>
+            </dd>
+            <dt>Spring authorities</dt>
+            <dd>
+                <ul>
+                    <li th:each="authority : ${authorities}"
+                        th:text="${authority}">authority</li>
+                </ul>
+            </dd>
+        </dl>
+
+        <h2>Complete ID Token claims</h2>
+        <pre th:text="${claims}">{}</pre>
+
+        <form th:action="@{/logout}" method="post">
+            <button class="button secondary" type="submit">Logout</button>
+        </form>
+    </section>
+</main>
+</body>
+</html>

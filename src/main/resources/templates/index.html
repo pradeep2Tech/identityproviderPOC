@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Identity Provider POC</title>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body>
+<main class="container">
+    <section class="card">
+        <h1>Identity Provider POC</h1>
+        <p class="muted">Secure authentication with Auth0 and OpenID Connect</p>
+
+        <div th:if="${username == null}">
+            <a class="button" th:href="@{/oauth2/authorization/auth0}">Login with Auth0</a>
+        </div>
+
+        <div th:if="${username != null}">
+            <p class="welcome">Welcome <strong th:text="${username}">User</strong></p>
+            <div class="actions">
+                <a class="button" th:href="@{/profile}">Profile</a>
+                <form th:action="@{/logout}" method="post">
+                    <button class="button secondary" type="submit">Logout</button>
+                </form>
+            </div>
+        </div>
+    </section>
+</main>
+</body>
+</html>
