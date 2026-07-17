@@ -15,7 +15,7 @@
     <artifactId>identityprovider-poc</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>identityproviderPOC</name>
-    <description>Auth0 OpenID Connect proof of concept using Spring Security OAuth2 Client</description>
+    <description>Keycloak-brokered OpenID Connect proof of concept using Spring Security OAuth2 Client</description>
 
     <properties>
         <java.version>21</java.version>

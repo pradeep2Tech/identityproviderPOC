@@ -10,10 +10,10 @@
 <main class="container">
     <section class="card">
         <h1>Identity Provider POC</h1>
-        <p class="muted">Secure authentication with Auth0 and OpenID Connect</p>
+        <p class="muted">Secure authentication through Keycloak and Auth0</p>
 
         <div th:if="${username == null}">
-            <a class="button" th:href="@{/oauth2/authorization/auth0}">Login with Auth0</a>
+            <a class="button" th:href="@{/oauth2/authorization/keycloak}">Login with Keycloak</a>
         </div>
 
         <div th:if="${username != null}">

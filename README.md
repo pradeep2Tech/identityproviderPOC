@@ -1,90 +1,91 @@
 # identityproviderPOC
 
-Spring Boot 3.5 application that authenticates users with Auth0 using OpenID Connect Authorization Code Flow. It uses Spring Security OAuth2 Client only; the Auth0 Java SDK is not used.
+Spring Boot 3.5 application that trusts Keycloak for OpenID Connect authentication and authorization. Keycloak brokers user authentication to Auth0; Spring Boot has no direct Auth0 client configuration and uses only standard Spring Security OAuth2 Client support.
 
-## Prerequisites
+## Architecture and token ownership
 
-- Java 21
-- Maven 3.9+
-- An Auth0 tenant and Regular Web Application
-- Docker and Docker Compose (optional)
+```text
+Browser
+  ↓
+Spring Boot
+  ↓ OIDC
+Keycloak
+  ↓ identity brokering
+Auth0
+  ↓
+User
+```
 
-## Auth0 configuration
+- Auth0 authenticates the user.
+- Keycloak brokers the external identity, creates the application identity session, and issues tokens.
+- Spring Boot trusts only Keycloak. Downstream services must validate Keycloak access tokens.
+- ID tokens identify the signed-in user and must not be forwarded to APIs.
 
-Create or open a **Regular Web Application** in the Auth0 Dashboard and configure:
+## Prerequisites and exact values
+
+- Java 21 and Maven 3.9+
+- Keycloak at `http://localhost:8081`
+- Auth0 configured as an external OIDC identity provider in Keycloak
 
 | Setting | Value |
 |---|---|
-| Allowed Callback URLs | `http://localhost:8080/login/oauth2/code/auth0` |
-| Allowed Logout URLs | `http://localhost:8080/` |
-| Allowed Web Origins | `http://localhost:8080` |
+| Realm | `identity-poc` |
+| Client | `identityprovider-poc` |
+| Issuer | `http://localhost:8081/realms/identity-poc` |
+| Client authentication | On |
+| Standard flow | On |
+| Valid redirect URI / callback | `http://localhost:8080/login/oauth2/code/keycloak` |
+| Valid post logout redirect URI | `http://localhost:8080/` |
+| Login initiation | `http://localhost:8080/oauth2/authorization/keycloak` |
 
-The application performs local Spring Security logout and returns to `/`. It does not terminate the Auth0 single sign-on session. If Auth0 roles should appear on the profile page, add them to the ID token with an Auth0 Post Login Action under the namespaced `https://identityproviderpoc.example.com/roles` claim. These values are mapped to Spring Security authorities with the `ROLE_` prefix.
+## Keycloak realm-role mapper
+
+Spring Boot reads application roles only from `realm_access.roles`. The claim may not be present in Keycloak's ID token by default. In the Keycloak Admin Console:
+
+1. Open realm **identity-poc**.
+2. Open **Clients** → **identityprovider-poc**.
+3. Open **Client scopes**, then the client's dedicated scope (or another scope assigned to the client).
+4. Select **Add mapper** → **By configuration** → **User Realm Role**.
+5. Set **Token Claim Name** to `realm_access.roles`.
+6. Set **Multivalued**, **Add to ID token**, **Add to access token**, and **Add to userinfo** to **On**, then save.
+
+Assign realm role `ADMIN` to `pradeep@example.com` and `USER` to `user@example.com`. The application maps these to `ROLE_ADMIN` and `ROLE_USER`. It ignores internal roles such as `offline_access`, `uma_authorization`, and `default-roles-identity-poc` in its displayed/application authorities.
 
 ## Environment configuration
 
-Copy the committed example file and replace the placeholders:
-
-```bash
-cp .env.example .env
-```
-
-On Windows PowerShell:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Set these values in `.env`:
+Copy `.env.example` to the ignored `.env` file and replace only the client-secret placeholder:
 
 ```dotenv
-AUTH0_DOMAIN=your-tenant.us.auth0.com
-AUTH0_CLIENT_ID=your-client-id
-AUTH0_CLIENT_SECRET=your-client-secret
+KEYCLOAK_CLIENT_ID=identityprovider-poc
+KEYCLOAK_CLIENT_SECRET=replace-with-keycloak-client-secret
+KEYCLOAK_ISSUER_URI=http://localhost:8081/realms/identity-poc
 ```
 
-Use the Auth0 domain without `https://` and without a trailing slash. The application loads `.env` as an optional local Spring configuration file. Environment variables with the same names are also supported and take precedence. `.env` is ignored by Git and excluded from the Docker build context.
+Operating-system environment variables take precedence over `.env`. Never commit a real client secret.
 
-## Run locally
+## Run and package
 
-```bash
-mvn spring-boot:run
-```
+Run `mvn spring-boot:run`, open `http://localhost:8080`, select **Login with Keycloak**, and then choose the Auth0 identity provider on the Keycloak login page.
 
-Open `http://localhost:8080` and select **Login with Auth0**.
+Package with `mvn clean package`, then run `java -jar target/identityprovider-poc-0.0.1-SNAPSHOT.jar`. Docker remains available through the existing Dockerfile and Compose configuration.
 
-## Package
+## Logout and diagnostics
 
-```bash
-mvn clean package
-java -jar target/identityprovider-poc-0.0.1-SNAPSHOT.jar
-```
+Logout is a CSRF-protected POST. It clears the Spring session and `JSESSIONID`, then uses Keycloak's discovered OIDC end-session endpoint and returns to `http://localhost:8080/`. Spring Boot never constructs or calls an Auth0 logout URL. Auth0 can retain its upstream SSO session, so a later Keycloak login may authenticate silently through Auth0.
 
-## Docker
+OAuth2 DEBUG logging is enabled temporarily for local troubleshooting. Do not log client secrets, authorization codes, access tokens, or refresh tokens. The profile page displays complete ID-token claims for this local POC only; raw token claims should not normally be exposed in a production UI.
 
-Build the image:
+## Verification matrix
 
-```bash
-docker build -t identityprovider-poc .
-```
+| User | Authentication | Keycloak role | `/profile` | `/admin` |
+|---|---|---|---|---|
+| `pradeep@example.com` | Through Auth0 | `ADMIN` | Allowed | Allowed |
+| `user@example.com` | Through Auth0 | `USER` | Allowed | 403 Forbidden |
 
-Run the image directly:
+Manual verification:
 
-```bash
-docker run --rm --env-file .env -p 8080:8080 identityprovider-poc
-```
-
-Or build and run with Docker Compose (which loads `.env`):
-
-```bash
-docker compose up --build
-```
-
-Stop it with `docker compose down`.
-
-## Security notes
-
-- `/`, favicon, and static asset paths are public; `/profile` is authenticated.
-- Login uses OIDC discovery from the configured Auth0 `issuer-uri`.
-- Logout requires a CSRF-protected POST request.
-- Client secrets are supplied only through environment configuration and must never be committed.
+1. Start Keycloak and this application, then use the login-initiation URL above.
+2. Confirm the browser visits Keycloak, delegates to Auth0, and returns through `/login/oauth2/code/keycloak`.
+3. For each user, confirm the profile issuer is the Keycloak issuer and `realm_access.roles`, displayed application roles, and Spring authorities match the table.
+4. Confirm an unauthenticated request to `/profile` or `/admin` starts login, and confirm the USER account receives 403 at `/admin`.
+5. POST logout from the UI; confirm Keycloak logout occurs and the browser returns to `/`.
